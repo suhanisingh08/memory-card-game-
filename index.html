@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memory Card Game</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:linear-gradient(135deg,#312e81,#1e1b4b);color:#fff;min-height:100vh;padding:20px;display:flex;flex-direction:column;align-items:center;gap:14px}
+h1{font-size:30px}
+.bar{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;align-items:center;font-size:17px}
+select,button{padding:8px 14px;border:none;border-radius:8px;font-size:15px;cursor:pointer}
+button{background:#fbbf24;color:#1e1b4b;font-weight:700}
+button:hover{background:#fcd34d}
+.board{display:grid;grid-template-columns:repeat(var(--cols),1fr);gap:10px;width:100%;max-width:520px}
+.card{aspect-ratio:1;perspective:600px;cursor:pointer}
+.inner{position:relative;width:100%;height:100%;transition:transform .45s;transform-style:preserve-3d}
+.card.flipped .inner,.card.matched .inner{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;backface-visibility:hidden;display:flex;align-items:center;justify-content:center;border-radius:12px;font-size:clamp(26px,7vw,46px)}
+.front{background:#6366f1;border:3px solid #818cf8;color:#c7d2fe}
+.back{background:#fff;transform:rotateY(180deg)}
+.matched .back{background:#bbf7d0}
+.card:hover .front{background:#7c7ff5}
+#win{display:none;text-align:center;background:#fff;color:#1e1b4b;border-radius:14px;padding:18px 26px;max-width:420px}
+#win.show{display:block}
+.best{color:#c7d2fe;font-size:14px}
+</style>
+</head>
+<body>
+<h1>🧠 Memory Card Game</h1>
+<div class="bar">
+  <label>Level
+    <select id="level">
+      <option value="easy">Easy (12 cards)</option>
+      <option value="medium" selected>Medium (16 cards)</option>
+      <option value="hard">Hard (24 cards)</option>
+    </select>
+  </label>
+  <span>Moves: <b id="moves">0</b></span>
+  <span>Time: <b id="time">0</b>s</span>
+  <button id="restart">New Game</button>
+</div>
+<div class="best" id="best"></div>
+<div class="board" id="board"></div>
+<div id="win"></div>
+
+<script>
+const EMOJIS = ['🍎','🚀','🐱','⚽','🎸','🌈','🍕','🦋','🔥','🎲','🌻','🐳'];
+const LEVELS = { easy:{pairs:6,cols:4}, medium:{pairs:8,cols:4}, hard:{pairs:12,cols:6} };
+const $ = id => document.getElementById(id);
+let first = null, lock = false, moves = 0, matched = 0, seconds = 0, timer = null, started = false;
+let bests = {};
+try { bests = JSON.parse(localStorage.getItem('memoryBest')) || {}; } catch (e) {}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+
+function showBest() {
+  const l = $('level').value;
+  $('best').textContent = bests[l] ? `Best for this level: ${bests[l].moves} moves in ${bests[l].time}s` : 'No best score for this level yet';
+}
+
+function newGame() {
+  clearInterval(timer);
+  const cfg = LEVELS[$('level').value];
+  first = null; lock = false; moves = 0; matched = 0; seconds = 0; started = false;
+  $('moves').textContent = 0; $('time').textContent = 0;
+  $('win').classList.remove('show');
+  const deck = shuffle([...EMOJIS.slice(0, cfg.pairs), ...EMOJIS.slice(0, cfg.pairs)]);
+  const board = $('board');
+  board.style.setProperty('--cols', cfg.cols);
+  board.innerHTML = '';
+  deck.forEach(sym => {
+    const c = document.createElement('div');
+    c.className = 'card';
+    c.dataset.sym = sym;
+    c.innerHTML = '<div class="inner"><div class="face front">?</div><div class="face back"></div></div>';
+    c.querySelector('.back').textContent = sym;
+    c.addEventListener('click', () => flip(c));
+    board.appendChild(c);
+  });
+  showBest();
+}
+
+function flip(card) {
+  if (lock || card === first || card.classList.contains('matched') || card.classList.contains('flipped')) return;
+  if (!started) { started = true; timer = setInterval(() => { seconds++; $('time').textContent = seconds; }, 1000); }
+  card.classList.add('flipped');
+  if (!first) { first = card; return; }
+  moves++; $('moves').textContent = moves;
+  if (first.dataset.sym === card.dataset.sym) {
+    first.classList.replace('flipped', 'matched');
+    card.classList.replace('flipped', 'matched');
+    first = null; matched++;
+    if (matched === LEVELS[$('level').value].pairs) win();
+  } else {
+    lock = true;
+    const a = first; first = null;
+    setTimeout(() => { a.classList.remove('flipped'); card.classList.remove('flipped'); lock = false; }, 800);
+  }
+}
+
+function win() {
+  clearInterval(timer);
+  const l = $('level').value;
+  const record = !bests[l] || moves < bests[l].moves || (moves === bests[l].moves && seconds < bests[l].time);
+  if (record) { bests[l] = { moves, time: seconds }; try { localStorage.setItem('memoryBest', JSON.stringify(bests)); } catch (e) {} }
+  $('win').innerHTML = `<h2>🎉 You won!</h2><p>${moves} moves in ${seconds} seconds</p>${record ? '<p><b>New best score!</b></p>' : ''}`;
+  $('win').classList.add('show');
+  showBest();
+}
+
+$('restart').addEventListener('click', newGame);
+$('level').addEventListener('change', newGame);
+newGame();
+</script>
+</body>
+</html>
